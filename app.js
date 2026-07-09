@@ -515,7 +515,34 @@ function renderComposerCategory(cat) {
     const nonFavs = shuffle(pool.filter((d) => !d.favorite));
     pool = [...favs, ...nonFavs].slice(0, 10);
   }
-    
+
+  const listEl = document.querySelector(`[data-suggestions="${cat}"]`);
+  const atMax = sel.length >= 4;
+  if (pool.length === 0) {
+    listEl.innerHTML = `<p style="color:var(--ink-soft); font-size:14px; padding:4px 2px;">Aucun plat trouvé.</p>`;
+  } else {
+    listEl.innerHTML = pool
+      .map((d) => {
+        const compatible = isCompatible(d, composerState.personCount);
+        const tags = `${d.favorite ? '<span class="tag fav">⭐ favori</span>' : ""}${
+          compatible ? "" : '<span class="tag">effectif non idéal</span>'
+        }`;
+        return `
+        <div class="suggestion-item ${compatible ? "compatible" : ""}">
+          <span>${escapeHtml(d.name)}${tags}</span>
+          <button class="add-mini-btn" data-add="${cat}:${d.id}" ${atMax ? "disabled" : ""}>Ajouter</button>
+        </div>`;
+      })
+      .join("");
+    listEl.querySelectorAll("[data-add]").forEach((btn) => {
+      btn.addEventListener("click", () => {
+        const [c, id] = btn.dataset.add.split(":");
+        if (composerState.selections[c].length >= 4) return;
+        composerState.selections[c].push(id);
+        renderComposerCategory(c);
+      });
+    });
+  }
 }
 
 function attachComposerHandlers() {
