@@ -367,6 +367,30 @@ button {
   border: 2px solid transparent;
 }
 .suggestion-item.compatible { border-color: var(--sage); }
+.composer-search {
+  width: 100%;
+  padding: 12px 14px;
+  border-radius: 10px;
+  border: 2px solid var(--cream-dark);
+  font-size: 16px;
+  background: var(--white);
+  color: var(--ink);
+  font-family: inherit;
+  margin-bottom: 10px;
+}
+.composer-new-dish {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: none;
+  border: 2px dashed var(--forest-light);
+  color: var(--forest-light);
+  border-radius: 10px;
+  padding: 8px 12px;
+  font-weight: 700;
+  font-size: 14px;
+  margin-bottom: 10px;
+}
 .suggestion-item .tag {
   font-size: 11px;
   font-weight: 700;

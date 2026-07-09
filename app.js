@@ -437,6 +437,7 @@ function renderComposerSection(cat) {
       <div class="composer-count" data-count="${cat}"></div>
       <div class="selected-chips" data-chips="${cat}"></div>
       <input type="search" class="composer-search" data-search="${cat}" placeholder="Rechercher ${CAT_LABELS[cat].toLowerCase() === "plat" ? "un plat" : "une " + CAT_LABELS[cat].toLowerCase()}..." />
+      <button type="button" class="composer-new-dish" data-newdish="${cat}">➕ Nouveau plat</button>
       <div class="suggestion-list" data-suggestions="${cat}"></div>
     </div>`;
 }
@@ -455,6 +456,15 @@ function isCompatible(dish, personCount) {
   if (dish.minPeople != null && personCount < dish.minPeople) return false;
   if (dish.maxPeople != null && personCount > dish.maxPeople) return false;
   return true;
+}
+
+function shuffle(arr) {
+  const a = arr.slice();
+  for (let i = a.length - 1; i > 0; i--) {
+    const j = Math.floor(Math.random() * (i + 1));
+    [a[i], a[j]] = [a[j], a[i]];
+  }
+  return a;
 }
 
 function sortSuggestions(dishes, personCount, usage) {
@@ -495,43 +505,27 @@ function renderComposerCategory(cat) {
   const query = normalize(searchInput.value);
   const usage = computeUsageCounts();
   let pool = data.dishes.filter((d) => d.category === cat && !sel.includes(d.id));
-  if (query) pool = pool.filter((d) => normalize(d.name).includes(query));
-  pool = sortSuggestions(pool, composerState.personCount, usage);
-  pool = pool.slice(0, 12);
 
-  const listEl = document.querySelector(`[data-suggestions="${cat}"]`);
-  const atMax = sel.length >= 4;
-  if (pool.length === 0) {
-    listEl.innerHTML = `<p style="color:var(--ink-soft); font-size:14px; padding:4px 2px;">Aucun plat trouvé.</p>`;
+  if (query) {
+    pool = pool.filter((d) => normalize(d.name).includes(query));
+    pool = sortSuggestions(pool, composerState.personCount, usage);
+    pool = pool.slice(0, 12);
   } else {
-    listEl.innerHTML = pool
-      .map((d) => {
-        const compatible = isCompatible(d, composerState.personCount);
-        const tags = `${d.favorite ? '<span class="tag fav">⭐ favori</span>' : ""}${
-          compatible ? "" : '<span class="tag">effectif non idéal</span>'
-        }`;
-        return `
-        <div class="suggestion-item ${compatible ? "compatible" : ""}">
-          <span>${escapeHtml(d.name)}${tags}</span>
-          <button class="add-mini-btn" data-add="${cat}:${d.id}" ${atMax ? "disabled" : ""}>Ajouter</button>
-        </div>`;
-      })
-      .join("");
-    listEl.querySelectorAll("[data-add]").forEach((btn) => {
-      btn.addEventListener("click", () => {
-        const [c, id] = btn.dataset.add.split(":");
-        if (composerState.selections[c].length >= 4) return;
-        composerState.selections[c].push(id);
-        renderComposerCategory(c);
-      });
-    });
+    const favs = shuffle(pool.filter((d) => d.favorite));
+    const nonFavs = shuffle(pool.filter((d) => !d.favorite));
+    pool = [...favs, ...nonFavs].slice(0, 10);
   }
+    
 }
 
 function attachComposerHandlers() {
   CAT_ORDER.forEach((cat) => {
     renderComposerCategory(cat);
     document.querySelector(`[data-search="${cat}"]`).addEventListener("input", () => renderComposerCategory(cat));
+    document.querySelector(`[data-newdish="${cat}"]`).addEventListener("click", () => {
+      composerAddContext = cat;
+      openDishForm(null, cat);
+    });
   });
 }
 
@@ -654,10 +648,14 @@ function renderDishList() {
 
 let dishFormMode = "add";
 let dishFormEditingId = null;
+let composerAddContext = null; // catégorie où auto-ajouter le plat créé depuis le composeur
 
-document.getElementById("btnNewDish").addEventListener("click", () => openDishForm(null));
+document.getElementById("btnNewDish").addEventListener("click", () => {
+  composerAddContext = null;
+  openDishForm(null);
+});
 
-function openDishForm(id) {
+function openDishForm(id, defaultCategory) {
   dishFormEditingId = id;
   dishFormMode = id ? "edit" : "add";
   const dish = id ? data.dishes.find((d) => d.id === id) : null;
@@ -665,7 +663,7 @@ function openDishForm(id) {
   document.getElementById("dishFormTitle").textContent = dish ? "Modifier le plat" : "Ajouter un plat";
   document.getElementById("dishFormName").value = dish ? dish.name : "";
   document.querySelectorAll('input[name="dishFormCat"]').forEach((r) => {
-    r.checked = dish ? r.value === dish.category : r.value === "plat";
+    r.checked = dish ? r.value === dish.category : r.value === (defaultCategory || "plat");
   });
   document.getElementById("dishFormMin").value = dish && dish.minPeople != null ? dish.minPeople : "";
   document.getElementById("dishFormMax").value = dish && dish.maxPeople != null ? dish.maxPeople : "";
@@ -694,17 +692,32 @@ document.getElementById("btnSaveDish").addEventListener("click", () => {
   const favorite = document.getElementById("dishFormFav").checked;
   const notes = document.getElementById("dishFormNotes").value.trim();
 
+let newDishId = null;
   if (dishFormMode === "edit" && dishFormEditingId) {
     const dish = data.dishes.find((d) => d.id === dishFormEditingId);
     Object.assign(dish, { name, category, minPeople, maxPeople, favorite, notes });
   } else {
-    data.dishes.push({ id: uid(), name, category, minPeople, maxPeople, favorite, notes });
+    newDishId = uid();
+    data.dishes.push({ id: newDishId, name, category, minPeople, maxPeople, favorite, notes });
   }
   saveData();
   closeModal("modalDishForm");
   renderDishList();
   renderPlanning();
-  showToast("Plat enregistré.");
+
+  if (newDishId && composerAddContext && composerState) {
+    const cat = composerAddContext;
+    if (composerState.selections[cat].length < 4) {
+      composerState.selections[cat].push(newDishId);
+      renderComposerCategory(cat);
+      showToast("Plat créé et ajouté au repas.");
+    } else {
+      showToast("Plat créé (maximum de 4 déjà atteint pour cette catégorie).");
+    }
+  } else {
+    showToast("Plat enregistré.");
+  }
+  composerAddContext = null;
 });
 
 document.getElementById("btnDeleteDish").addEventListener("click", () => {
