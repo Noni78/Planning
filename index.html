@@ -1,0 +1,170 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, viewport-fit=cover" />
+<title>Menus Familiaux</title>
+<meta name="theme-color" content="#2F4A3C" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Menus" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/icon-192.png" />
+<link rel="icon" href="icons/icon-192.png" />
+<link rel="stylesheet" href="style.css" />
+</head>
+<body>
+<div id="app">
+
+  <div class="topbar">
+    <div>
+      <h1>🍽️ Menus Familiaux</h1>
+      <div class="subtitle" id="topbarSubtitle">Planification des repas</div>
+    </div>
+  </div>
+
+  <!-- ===================== PLANNING SCREEN ===================== -->
+  <section class="screen active" id="screen-planning">
+    <button class="btn btn-primary" id="btnNewPeriod" style="margin-bottom:16px;">➕ Créer une période de planification</button>
+    <div id="periodsList"></div>
+    <div id="planningList"></div>
+  </section>
+
+  <!-- ===================== PLATS SCREEN ===================== -->
+  <section class="screen" id="screen-plats">
+    <button class="btn btn-primary" id="btnNewDish" style="margin-bottom:16px;">➕ Ajouter un plat</button>
+    <div class="field">
+      <input type="search" id="dishSearchInput" placeholder="🔎 Rechercher un plat par son nom" />
+    </div>
+    <div class="filter-row" id="dishFilterRow">
+      <button class="filter-chip active" data-cat="tous">Tous</button>
+      <button class="filter-chip" data-cat="entree">Entrées</button>
+      <button class="filter-chip" data-cat="plat">Plats</button>
+      <button class="filter-chip" data-cat="dessert">Desserts</button>
+    </div>
+    <div id="dishList"></div>
+  </section>
+
+  <!-- ===================== REGLAGES SCREEN ===================== -->
+  <section class="screen" id="screen-reglages">
+    <div class="card">
+      <h2 style="margin-bottom:10px;">Sauvegarde</h2>
+      <p style="color:var(--ink-soft); margin-bottom:16px;">Exportez toutes vos données (plats + plannings) dans un fichier, pour les transférer sur un autre téléphone.</p>
+      <button class="btn btn-secondary" id="btnExport" style="margin-bottom:12px;">⬇️ Exporter mes données</button>
+      <button class="btn btn-secondary" id="btnImport">⬆️ Importer un fichier de sauvegarde</button>
+      <input type="file" id="importFileInput" accept="application/json" style="display:none;" />
+    </div>
+    <div class="card">
+      <h2 style="margin-bottom:10px;">Réinitialiser</h2>
+      <p style="color:var(--ink-soft); margin-bottom:16px;">Supprime définitivement tous les plats et tous les plannings de cet appareil.</p>
+      <button class="btn btn-danger" id="btnReset">🗑️ Effacer toutes les données</button>
+    </div>
+  </section>
+
+  <div class="bottomnav">
+    <button class="nav-btn active" data-screen="planning"><span class="icon">📅</span>Planning</button>
+    <button class="nav-btn" data-screen="plats"><span class="icon">🍲</span>Plats</button>
+    <button class="nav-btn" data-screen="reglages"><span class="icon">⚙️</span>Réglages</button>
+  </div>
+
+</div>
+
+<!-- ===================== MODAL: New period ===================== -->
+<div class="modal-overlay" id="modalPeriod">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2 id="periodModalTitle">Nouvelle période</h2>
+      <button class="modal-close" data-close="modalPeriod">✕</button>
+    </div>
+    <div class="field">
+      <label>Du</label>
+      <input type="date" id="periodStart" />
+    </div>
+    <div class="field">
+      <label>Au</label>
+      <input type="date" id="periodEnd" />
+    </div>
+    <h3 style="margin-bottom:8px;">Nombre de convives par plage</h3>
+    <p class="field-hint">Découpez la période si le nombre de personnes change (ex : 8 personnes du 7 au 12, puis 12 du 13 au 20).</p>
+    <div id="rangesContainer"></div>
+    <button class="btn btn-ghost" id="btnAddRange" style="margin-bottom:18px;">+ Ajouter une plage</button>
+    <button class="btn btn-primary" id="btnSavePeriod">Générer le calendrier</button>
+    <button class="btn btn-danger" id="btnDeletePeriod" style="display:none; margin-top:10px;">🗑️ Supprimer cette période</button>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Meal composer ===================== -->
+<div class="modal-overlay" id="modalMeal">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <div>
+        <h2 id="mealComposerTitle">Composer le repas</h2>
+        <div class="subtitle" id="mealComposerSubtitle" style="color:var(--ink-soft); font-size:13px;"></div>
+      </div>
+      <button class="modal-close" data-close="modalMeal">✕</button>
+    </div>
+    <div id="mealComposerBody"></div>
+    <button class="btn btn-primary" id="btnSaveMeal" style="margin-top:6px;">Enregistrer le repas</button>
+    <button class="btn btn-ghost" id="btnClearMeal" style="margin-top:8px;">Vider ce repas</button>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Dish detail (read-only) ===================== -->
+<div class="modal-overlay" id="modalDishDetail">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2 id="detailDishName">Plat</h2>
+      <button class="modal-close" data-close="modalDishDetail">✕</button>
+    </div>
+    <div id="dishDetailBody"></div>
+    <button class="btn btn-secondary" id="btnEditFromDetail">✏️ Modifier ce plat</button>
+  </div>
+</div>
+
+<!-- ===================== MODAL: Dish form (add/edit) ===================== -->
+<div class="modal-overlay" id="modalDishForm">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2 id="dishFormTitle">Ajouter un plat</h2>
+      <button class="modal-close" data-close="modalDishForm">✕</button>
+    </div>
+    <div class="field">
+      <label>Nom du plat</label>
+      <input type="text" id="dishFormName" placeholder="Ex : Gratin dauphinois" />
+    </div>
+    <div class="field">
+      <label>Catégorie</label>
+      <div class="radio-group">
+        <label><input type="radio" name="dishFormCat" value="entree" /> Entrée</label>
+        <label><input type="radio" name="dishFormCat" value="plat" checked /> Plat</label>
+        <label><input type="radio" name="dishFormCat" value="dessert" /> Dessert</label>
+      </div>
+    </div>
+    <div class="field">
+      <label>Nombre de personnes</label>
+      <div style="display:flex; gap:10px;">
+        <input type="number" id="dishFormMin" min="1" placeholder="Min" style="flex:1;" />
+        <input type="number" id="dishFormMax" min="1" placeholder="Max" style="flex:1;" />
+      </div>
+    </div>
+    <div class="toggle-row" style="margin-bottom:16px;">
+      <span style="font-weight:700; color:var(--forest);">⭐ Plat favori</span>
+      <label class="switch">
+        <input type="checkbox" id="dishFormFav" />
+        <span class="slider"></span>
+      </label>
+    </div>
+    <div class="field">
+      <label>Notes (recette, astuces, allergies, accompagnements…)</label>
+      <textarea id="dishFormNotes" placeholder="Vos notes ici…"></textarea>
+    </div>
+    <button class="btn btn-primary" id="btnSaveDish" style="margin-bottom:10px;">Enregistrer le plat</button>
+    <button class="btn btn-danger" id="btnDeleteDish" style="display:none;">🗑️ Supprimer ce plat</button>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script src="app.js"></script>
+</body>
+</html>
