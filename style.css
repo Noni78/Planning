@@ -356,6 +356,16 @@ button {
   font-size: 14px;
   line-height: 1;
 }
+
+.suggestion-list {
+  display: none;
+  margin-top: 2px;
+}
+
+.suggestion-list.open {
+  display: block;
+}
+
 .suggestion-item {
   display: flex;
   align-items: center;

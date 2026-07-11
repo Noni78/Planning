@@ -548,7 +548,16 @@ function renderComposerCategory(cat) {
 function attachComposerHandlers() {
   CAT_ORDER.forEach((cat) => {
     renderComposerCategory(cat);
-    document.querySelector(`[data-search="${cat}"]`).addEventListener("input", () => renderComposerCategory(cat));
+    const searchInput = document.querySelector(`[data-search="${cat}"]`);
+    const suggList = document.querySelector(`[data-suggestions="${cat}"]`);
+
+    searchInput.addEventListener("input", () => renderComposerCategory(cat));
+    searchInput.addEventListener("focus", () => suggList.classList.add("open"));
+    searchInput.addEventListener("blur", () => {
+      // petit délai pour laisser le clic sur "Ajouter" se déclencher avant de cacher la liste
+      setTimeout(() => suggList.classList.remove("open"), 150);
+    });
+
     document.querySelector(`[data-newdish="${cat}"]`).addEventListener("click", () => {
       composerAddContext = cat;
       openDishForm(null, cat);
