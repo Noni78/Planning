@@ -3,7 +3,7 @@
    Stockage: localStorage (aucune donnée n'est envoyée sur internet)
    ======================================================================= */
 
-const STORAGE_KEY = "menusFamiliaux_v1";
+const STORAGE_KEY = "menusFamiliaux_v5";
 
 const CAT_LABELS = { entree: "Entrée", plat: "Plat", dessert: "Dessert" };
 const CAT_ORDER = ["entree", "plat", "dessert"];
@@ -831,10 +831,20 @@ renderPeriods();
 renderPlanning();
 renderDishList();
 
+const SW_VERSION = "v5"; // 👉 change cette valeur à chaque mise à jour (en même temps que CACHE_NAME dans sw.js)
+
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
-    navigator.serviceWorker.register("sw.js").catch(() => {
+    navigator.serviceWorker.register(`sw.js?v=${SW_VERSION}`, { updateViaCache: "none" }).catch(() => {
       /* offline caching indisponible, l'app fonctionne quand même en ligne */
     });
+  });
+
+  // Recharge automatiquement la page dès qu'une nouvelle version prend le contrôle
+  let refreshing = false;
+  navigator.serviceWorker.addEventListener("controllerchange", () => {
+    if (refreshing) return;
+    refreshing = true;
+    window.location.reload();
   });
 }
