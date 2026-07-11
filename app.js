@@ -831,7 +831,7 @@ renderPeriods();
 renderPlanning();
 renderDishList();
 
-const SW_VERSION = "v5"; // 👉 change cette valeur à chaque mise à jour (en même temps que CACHE_NAME dans sw.js)
+const SW_VERSION = "v6"; // 👉 change cette valeur à chaque mise à jour (en même temps que CACHE_NAME dans sw.js)
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
