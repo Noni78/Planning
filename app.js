@@ -475,7 +475,6 @@ function sortSuggestions(dishes, personCount, usage) {
     const ca = isCompatible(a, personCount);
     const cb = isCompatible(b, personCount);
     if (ca !== cb) return ca ? -1 : 1; // compatibles d'abord
-    if (a.favorite !== b.favorite) return a.favorite ? -1 : 1; // favoris d'abord
     return a.name.localeCompare(b.name, "fr");
   });
 }
@@ -516,9 +515,7 @@ function renderComposerCategory(cat) {
     pool = sortSuggestions(pool, composerState.personCount, usage);
     pool = pool.slice(0, 12);
   } else {
-    const favs = shuffle(pool.filter((d) => d.favorite));
-    const nonFavs = shuffle(pool.filter((d) => !d.favorite));
-    pool = [...favs, ...nonFavs].slice(0, 10);
+    pool = shuffle(pool).slice(0, 5);
   }
 
   const listEl = document.querySelector(`[data-suggestions="${cat}"]`);
