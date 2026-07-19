@@ -496,6 +496,7 @@ function renderComposerCategory(cat) {
     btn.addEventListener("click", () => {
       const [c, id] = btn.dataset.remove.split(":");
       composerState.selections[c] = composerState.selections[c].filter((x) => x !== id);
+      persistComposerState();
       renderComposerCategory(c);
     });
   });
@@ -507,6 +508,10 @@ function renderComposerCategory(cat) {
   let pool = data.dishes.filter((d) => d.category === cat && !sel.includes(d.id));
 
   if (query) {
+    pool = pool.filter((d) => normalize(d.name).includes(query));
+    pool = sortSuggestions(pool, composerState.personCount, usage);
+    pool = pool.slice(0, 12);
+  } if (query) {
     pool = pool.filter((d) => normalize(d.name).includes(query));
     pool = sortSuggestions(pool, composerState.personCount, usage);
     pool = pool.slice(0, 12);
@@ -539,12 +544,23 @@ function renderComposerCategory(cat) {
         const [c, id] = btn.dataset.add.split(":");
         if (composerState.selections[c].length >= 4) return;
         composerState.selections[c].push(id);
+        persistComposerState();
         renderComposerCategory(c);
       });
     });
   }
 }
-
+function persistComposerState() {
+  if (!composerState) return;
+  const flat = [
+    ...composerState.selections.entree,
+    ...composerState.selections.plat,
+    ...composerState.selections.dessert
+  ];
+  data.days[composerState.date][composerState.mealType] = flat;
+  saveData();
+  renderPlanning();
+}
 function attachComposerHandlers() {
   CAT_ORDER.forEach((cat) => {
     renderComposerCategory(cat);
@@ -564,24 +580,6 @@ function attachComposerHandlers() {
     });
   });
 }
-
-document.getElementById("btnSaveMeal").addEventListener("click", () => {
-  if (!composerState) return;
-  if (composerState.selections.plat.length === 0) {
-    showToast("Sélectionnez au moins un plat.");
-    return;
-  }
-  const flat = [
-    ...composerState.selections.entree,
-    ...composerState.selections.plat,
-    ...composerState.selections.dessert
-  ];
-  data.days[composerState.date][composerState.mealType] = flat;
-  saveData();
-  closeModal("modalMeal");
-  renderPlanning();
-  showToast("Repas enregistré.");
-});
 
 document.getElementById("btnClearMeal").addEventListener("click", () => {
   if (!composerState) return;
@@ -745,6 +743,7 @@ let newDishId = null;
     const cat = composerAddContext;
     if (composerState.selections[cat].length < 4) {
       composerState.selections[cat].push(newDishId);
+      persistComposerState();
       renderComposerCategory(cat);
       showToast("Plat créé et ajouté au repas.");
     } else {
