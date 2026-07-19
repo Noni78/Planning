@@ -18,7 +18,7 @@
 
   <div class="topbar">
     <div>
-      <h1>🍽️ Menus </h1>
+      <h1>🍽️ Menus v11</h1>
       <div class="subtitle" id="topbarSubtitle">Planification des repas</div>
     </div>
   </div>
@@ -161,6 +161,19 @@
     <button class="btn btn-danger" id="btnDeleteDish" style="display:none;">🗑️ Supprimer ce plat</button>
   </div>
 </div>
+
+<!-- ===================== MODAL: Tous les plats d'une catégorie ===================== -->
+<div class="modal-overlay" id="modalAllDishes">
+  <div class="modal-sheet">
+    <div class="modal-header">
+      <h2 id="allDishesTitle">Tous les plats</h2>
+      <button class="modal-close" data-close="modalAllDishes">✕</button>
+    </div>
+    <input type="search" id="allDishesSearch" class="composer-search" placeholder="Rechercher..." style="margin-bottom:14px;" />
+    <div id="allDishesList"></div>
+  </div>
+</div>
+
 
 <div class="toast" id="toast"></div>
 

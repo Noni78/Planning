@@ -436,7 +436,10 @@ function renderComposerSection(cat) {
       <h3>${CAT_LABELS[cat]}${cat === "plat" ? " *" : ""}</h3>
       <div class="composer-count" data-count="${cat}"></div>
       <div class="selected-chips" data-chips="${cat}"></div>
-      <input type="search" class="composer-search" data-search="${cat}" placeholder="Rechercher ${CAT_LABELS[cat].toLowerCase() === "plat" ? "un plat" : "une " + CAT_LABELS[cat].toLowerCase()}..." />
+      <div class="composer-search-row">
+        <input type="search" class="composer-search" data-search="${cat}" placeholder="Rechercher ${CAT_LABELS[cat].toLowerCase() === "plat" ? "un plat" : "une " + CAT_LABELS[cat].toLowerCase()}..." />
+        <button type="button" class="btn-tous" data-tous="${cat}">Tous</button>
+      </div>
       <button type="button" class="composer-new-dish" data-newdish="${cat}">➕ Nouveau plat</button>
       <div class="suggestion-list" data-suggestions="${cat}"></div>
     </div>`;
@@ -567,7 +570,6 @@ function attachComposerHandlers() {
     searchInput.addEventListener("input", () => renderComposerCategory(cat));
     searchInput.addEventListener("focus", () => suggList.classList.add("open"));
     searchInput.addEventListener("blur", () => {
-      // petit délai pour laisser le clic sur "Ajouter" se déclencher avant de cacher la liste
       setTimeout(() => suggList.classList.remove("open"), 150);
     });
 
@@ -575,8 +577,62 @@ function attachComposerHandlers() {
       composerAddContext = cat;
       openDishForm(null, cat);
     });
+
+    document.querySelector(`[data-tous="${cat}"]`).addEventListener("click", () => openAllDishesModal(cat));
   });
 }
+
+let allDishesContext = null;
+
+function openAllDishesModal(cat) {
+  allDishesContext = cat;
+  document.getElementById("allDishesTitle").textContent = `Tous les plats — ${CAT_LABELS[cat]}`;
+  document.getElementById("allDishesSearch").value = "";
+  renderAllDishesList();
+  openModal("modalAllDishes");
+}
+
+function renderAllDishesList() {
+  const cat = allDishesContext;
+  const sel = composerState.selections[cat];
+  const query = normalize(document.getElementById("allDishesSearch").value);
+
+  let pool = data.dishes.filter((d) => d.category === cat && !sel.includes(d.id));
+  if (query) pool = pool.filter((d) => normalize(d.name).includes(query));
+  pool.sort((a, b) => a.name.localeCompare(b.name, "fr"));
+
+  const listEl = document.getElementById("allDishesList");
+  const atMax = sel.length >= 4;
+  if (pool.length === 0) {
+    listEl.innerHTML = `<p style="color:var(--ink-soft); font-size:14px; padding:4px 2px;">Aucun plat trouvé.</p>`;
+    return;
+  }
+  listEl.innerHTML = pool
+    .map((d) => {
+      const compatible = isCompatible(d, composerState.personCount);
+      const tags = `${d.favorite ? '<span class="tag fav">⭐ favori</span>' : ""}${
+        compatible ? "" : '<span class="tag">effectif non idéal</span>'
+      }`;
+      return `
+      <div class="suggestion-item ${compatible ? "compatible" : ""}">
+        <span>${escapeHtml(d.name)}${tags}</span>
+        <button class="add-mini-btn" data-add-all="${d.id}" ${atMax ? "disabled" : ""}>Ajouter</button>
+      </div>`;
+    })
+    .join("");
+
+  listEl.querySelectorAll("[data-add-all]").forEach((btn) => {
+    btn.addEventListener("click", () => {
+      if (composerState.selections[cat].length >= 4) return;
+      composerState.selections[cat].push(btn.dataset.addAll);
+      persistComposerState();
+      renderComposerCategory(cat);
+      renderAllDishesList();
+    });
+  });
+}
+
+document.getElementById("allDishesSearch").addEventListener("input", renderAllDishesList);
 
 document.getElementById("btnClearMeal").addEventListener("click", () => {
   if (!composerState) return;
@@ -827,7 +883,7 @@ renderPeriods();
 renderPlanning();
 renderDishList();
 
-const SW_VERSION = "v10"; // 👉 change cette valeur à chaque mise à jour (en même temps que CACHE_NAME dans sw.js)
+const SW_VERSION = "v11"; // 👉 change cette valeur à chaque mise à jour (en même temps que CACHE_NAME dans sw.js)
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
