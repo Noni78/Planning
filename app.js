@@ -22,6 +22,9 @@ function loadData() {
     const raw = localStorage.getItem(STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
+      // Backward compat: ensure archived field exists on all periods and days
+      (parsed.periods || []).forEach((p) => { if (p.archived === undefined) p.archived = false; });
+      Object.values(parsed.days || {}).forEach((d) => { if (d.archived === undefined) d.archived = false; });
       return {
         dishes: parsed.dishes || [],
         days: parsed.days || {},
@@ -138,17 +141,42 @@ function renderPlanning() {
     return;
   }
 
+  const activeDates = dates.filter((iso) => !data.days[iso].archived);
+  const archivedDates = dates.filter((iso) => data.days[iso].archived);
+
   let html = "";
-  let lastWeek = null;
-  for (const iso of dates) {
-    const week = mondayOf(iso);
-    if (week !== lastWeek) {
-      html += `<div class="week-divider">${fmtWeekLabel(week)}</div>`;
-      lastWeek = week;
+
+  // Active days
+  if (activeDates.length === 0 && archivedDates.length > 0) {
+    html += `<div class="empty-state"><p><strong>Tous les jours sont archivés</strong><br/>Désarchivez une période ou un jour pour les voir ici.</p></div>`;
+  } else {
+    let lastWeek = null;
+    for (const iso of activeDates) {
+      const week = mondayOf(iso);
+      if (week !== lastWeek) {
+        html += `<div class="week-divider">${fmtWeekLabel(week)}</div>`;
+        lastWeek = week;
+      }
+      const day = data.days[iso];
+      html += renderDayCard(iso, day);
     }
-    const day = data.days[iso];
-    html += renderDayCard(iso, day);
   }
+
+  // Archived days
+  if (archivedDates.length > 0) {
+    html += `<div class="archive-section-title">📦 Anciens menus</div>`;
+    let lastWeek = null;
+    for (const iso of archivedDates) {
+      const week = mondayOf(iso);
+      if (week !== lastWeek) {
+        html += `<div class="week-divider">${fmtWeekLabel(week)}</div>`;
+        lastWeek = week;
+      }
+      const day = data.days[iso];
+      html += renderDayCard(iso, day);
+    }
+  }
+
   container.innerHTML = html;
 
   container.querySelectorAll("[data-meal-slot]").forEach((el) => {
@@ -162,13 +190,29 @@ function renderPlanning() {
       openDishDetail(el.dataset.dishView);
     });
   });
+  container.querySelectorAll(".dish-chip.deleted").forEach((el) => {
+    el.addEventListener("click", (e) => {
+      e.stopPropagation();
+      if (confirm("Ce plat a été supprimé. Voulez-vous ouvrir le compositeur pour le remplacer ?")) {
+        openMealComposer(el.dataset.deletedDate, el.dataset.deletedMeal);
+      }
+    });
+  });
+  container.querySelectorAll("[data-day-archive]").forEach((btn) => {
+    btn.addEventListener("click", (e) => {
+      e.stopPropagation();
+      toggleDayArchived(btn.dataset.dayArchive);
+    });
+  });
 }
 
 function renderDayCard(iso, day) {
   const peopleTxt = day.personCount != null ? `${day.personCount} convives` : "Nombre de convives non défini";
+  const archiveTitle = day.archived ? "Désarchiver ce jour" : "Archiver ce jour";
   return `
-    <div class="card day-card">
+    <div class="card day-card${day.archived ? " archived" : ""}">
       <span class="date-badge">${fmtDateBadge(iso)}</span>
+      <button class="day-archive-btn" data-day-archive="${iso}" title="${archiveTitle}">📦</button>
       <div class="day-people">${peopleTxt}</div>
       ${renderMealRow(iso, "lunch", day.lunch || [])}
       ${renderMealRow(iso, "dinner", day.dinner || [])}
@@ -187,8 +231,10 @@ function renderMealRow(iso, mealType, dishIds) {
   const chips = dishIds
     .map((id) => {
       const dish = data.dishes.find((d) => d.id === id);
-      const name = dish ? dish.name : "Plat supprimé";
-      return `<button class="dish-chip" data-dish-view="${id}">${escapeHtml(name)}</button>`;
+      if (dish) {
+        return `<button class="dish-chip" data-dish-view="${id}">${escapeHtml(dish.name)}</button>`;
+      }
+      return `<button class="dish-chip deleted" data-deleted-date="${iso}" data-deleted-meal="${mealType}">Plat supprimé</button>`;
     })
     .join("");
   return `
@@ -281,7 +327,7 @@ function applyPeriodToDays(period) {
     const range = period.ranges.find((r) => iso >= r.start && iso <= r.end);
     const personCount = range ? range.count : null;
     if (!data.days[iso]) {
-      data.days[iso] = { personCount, lunch: [], dinner: [], periodId: period.id };
+      data.days[iso] = { personCount, lunch: [], dinner: [], periodId: period.id, archived: !!period.archived };
     } else {
       data.days[iso].personCount = personCount;
       data.days[iso].periodId = period.id;
@@ -364,24 +410,35 @@ function renderPeriods() {
     return;
   }
   const sorted = data.periods.slice().sort((a, b) => a.start.localeCompare(b.start));
-  container.innerHTML = sorted
-    .map((p) => {
-      const summary = p.ranges
-        .map((r) => `${r.count} pers. (${fmtDateBadge(r.start)} → ${fmtDateBadge(r.end)})`)
-        .join(" · ");
-      return `
-      <div class="period-card">
+  const active = sorted.filter((p) => !p.archived);
+  const archived = sorted.filter((p) => p.archived);
+
+  function periodCardHTML(p) {
+    const summary = p.ranges
+      .map((r) => `${r.count} pers. (${fmtDateBadge(r.start)} → ${fmtDateBadge(r.end)})`)
+      .join(" · ");
+    const archiveIcon = p.archived ? "📤" : "📥";
+    const archiveTitle = p.archived ? "Désarchiver" : "Archiver";
+    return `
+      <div class="period-card${p.archived ? " archived" : ""}">
         <div class="info">
           <span class="dates">${fmtDateBadge(p.start)} → ${fmtDateBadge(p.end)}</span>
           <span class="ranges-summary">${escapeHtml(summary)}</span>
         </div>
         <div class="actions">
           <button class="icon-btn" data-period-edit="${p.id}">✏️</button>
+          <button class="icon-btn archive-toggle" data-period-archive="${p.id}" title="${archiveTitle}">${archiveIcon}</button>
           <button class="icon-btn danger" data-period-delete="${p.id}">🗑️</button>
         </div>
       </div>`;
-    })
-    .join("");
+  }
+
+  let html = active.map(periodCardHTML).join("");
+  if (archived.length > 0) {
+    html += `<div class="archive-section-title">📦 Archivées</div>`;
+    html += archived.map(periodCardHTML).join("");
+  }
+  container.innerHTML = html;
 
   container.querySelectorAll("[data-period-edit]").forEach((btn) => {
     btn.addEventListener("click", () => openPeriodForm(btn.dataset.periodEdit));
@@ -392,6 +449,35 @@ function renderPeriods() {
       document.getElementById("btnDeletePeriod").click();
     });
   });
+  container.querySelectorAll("[data-period-archive]").forEach((btn) => {
+    btn.addEventListener("click", () => togglePeriodArchived(btn.dataset.periodArchive));
+  });
+}
+
+// ------------------- Archive toggles -------------------
+
+function togglePeriodArchived(periodId) {
+  const period = data.periods.find((p) => p.id === periodId);
+  if (!period) return;
+  const newState = !period.archived;
+  period.archived = newState;
+  // Sync all days belonging to this period
+  Object.values(data.days).forEach((day) => {
+    if (day.periodId === periodId) day.archived = newState;
+  });
+  saveData();
+  renderPeriods();
+  renderPlanning();
+  showToast(newState ? "Période archivée." : "Période désarchivée.");
+}
+
+function toggleDayArchived(iso) {
+  const day = data.days[iso];
+  if (!day) return;
+  day.archived = !day.archived;
+  saveData();
+  renderPlanning();
+  showToast(day.archived ? "Jour archivé." : "Jour désarchivé.");
 }
 
 // =======================================================================
@@ -448,6 +534,7 @@ function renderComposerSection(cat) {
 function computeUsageCounts() {
   const usage = {};
   Object.values(data.days).forEach((day) => {
+    if (day.archived) return; // exclude archived days from suggestions
     (day.lunch || []).forEach((id) => (usage[id] = (usage[id] || 0) + 1));
     (day.dinner || []).forEach((id) => (usage[id] = (usage[id] || 0) + 1));
   });
@@ -510,10 +597,6 @@ function renderComposerCategory(cat) {
   let pool = data.dishes.filter((d) => d.category === cat && !sel.includes(d.id));
 
   if (query) {
-    pool = pool.filter((d) => normalize(d.name).includes(query));
-    pool = sortSuggestions(pool, composerState.personCount, usage);
-    pool = pool.slice(0, 12);
-  } if (query) {
     pool = pool.filter((d) => normalize(d.name).includes(query));
     pool = sortSuggestions(pool, composerState.personCount, usage);
     pool = pool.slice(0, 12);
@@ -758,6 +841,10 @@ function openDishForm(id, defaultCategory) {
   document.getElementById("dishFormNotes").value = dish ? dish.notes || "" : "";
   document.getElementById("btnDeleteDish").style.display = dish ? "block" : "none";
 
+  // Reset duplicate warning
+  document.getElementById("dishFormDuplicateWarning").style.display = "none";
+  document.getElementById("btnSaveDish").disabled = false;
+
   openModal("modalDishForm");
 }
 
@@ -810,13 +897,54 @@ let newDishId = null;
 
 document.getElementById("btnDeleteDish").addEventListener("click", () => {
   if (!dishFormEditingId) return;
-  if (!confirm("Supprimer définitivement ce plat ?")) return;
+
+  // Check if dish is used in any meals
+  let usageCount = 0;
+  Object.values(data.days).forEach((day) => {
+    if ((day.lunch || []).includes(dishFormEditingId)) usageCount++;
+    if ((day.dinner || []).includes(dishFormEditingId)) usageCount++;
+  });
+
+  let msg = "Supprimer définitivement ce plat ?";
+  if (usageCount > 0) {
+    msg = `Ce plat est utilisé dans ${usageCount} repas. Le supprimer le retirera de ces repas. Continuer ?`;
+  }
+  if (!confirm(msg)) return;
+
   data.dishes = data.dishes.filter((d) => d.id !== dishFormEditingId);
   saveData();
   closeModal("modalDishForm");
   renderDishList();
   renderPlanning();
   showToast("Plat supprimé.");
+});
+
+// ------------------- Duplicate name check -------------------
+
+document.getElementById("dishFormName").addEventListener("input", () => {
+  const name = document.getElementById("dishFormName").value.trim();
+  const warning = document.getElementById("dishFormDuplicateWarning");
+  const saveBtn = document.getElementById("btnSaveDish");
+
+  if (!name) {
+    warning.style.display = "none";
+    saveBtn.disabled = false;
+    return;
+  }
+
+  const norm = normalize(name);
+  const duplicate = data.dishes.find((d) => {
+    if (dishFormMode === "edit" && dishFormEditingId && d.id === dishFormEditingId) return false;
+    return normalize(d.name) === norm;
+  });
+
+  if (duplicate) {
+    warning.style.display = "block";
+    saveBtn.disabled = true;
+  } else {
+    warning.style.display = "none";
+    saveBtn.disabled = false;
+  }
 });
 
 // =======================================================================
@@ -883,7 +1011,7 @@ renderPeriods();
 renderPlanning();
 renderDishList();
 
-const SW_VERSION = "v11"; // 👉 change cette valeur à chaque mise à jour (en même temps que CACHE_NAME dans sw.js)
+const SW_VERSION = "v12"; // 👉 change cette valeur à chaque mise à jour (en même temps que CACHE_NAME dans sw.js)
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {

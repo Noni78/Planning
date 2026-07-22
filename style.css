@@ -529,6 +529,97 @@ button {
 
 .field-hint { font-size: 13px; color: var(--ink-soft); margin-top: -8px; margin-bottom: 14px; }
 
+.duplicate-warning {
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--danger);
+  margin: 6px 0 0;
+  padding: 0;
+}
+
+.btn:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.dish-chip.deleted {
+  background: var(--cream-dark);
+  color: var(--ink-soft);
+  font-style: italic;
+  cursor: pointer;
+}
+.dish-chip.deleted:hover {
+  background: #F6E1DD;
+  color: var(--danger);
+}
+
+/* ---------- Archive feature ---------- */
+.archive-section-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--ink-soft);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin: 24px 4px 12px;
+  padding: 8px 0 4px;
+  border-bottom: 2px solid var(--cream-dark);
+}
+
+.period-card.archived {
+  opacity: 0.55;
+  border-left-color: var(--cream-dark);
+}
+.period-card.archived .dates {
+  color: var(--ink-soft);
+}
+
+.icon-btn.archive-toggle {
+  background: var(--cream);
+  font-size: 15px;
+  transition: background 0.2s;
+}
+.icon-btn.archive-toggle:hover {
+  background: var(--sage);
+}
+
+.day-card.archived {
+  opacity: 0.5;
+  border-top-color: var(--cream-dark);
+}
+.day-card.archived .date-badge {
+  background: var(--ink-soft);
+}
+.day-card.archived .meal-empty-btn {
+  border-color: var(--cream-dark);
+  color: var(--ink-soft);
+}
+.day-card.archived .dish-chip {
+  background: var(--cream-dark);
+  color: var(--ink-soft);
+}
+
+.day-archive-btn {
+  position: absolute;
+  top: 8px;
+  right: 12px;
+  background: var(--cream);
+  border: 1.5px solid var(--cream-dark);
+  border-radius: 8px;
+  padding: 4px 8px;
+  font-size: 14px;
+  cursor: pointer;
+  transition: background 0.2s, border-color 0.2s;
+  z-index: 2;
+}
+.day-archive-btn:hover {
+  background: var(--sage);
+  border-color: var(--forest-light);
+}
+.day-card.archived .day-archive-btn {
+  background: var(--cream-dark);
+  border-color: var(--ink-soft);
+}
+
 @media (min-width: 480px) {
   body { font-size: 18px; }
 }
