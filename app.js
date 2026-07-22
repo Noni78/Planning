@@ -194,7 +194,14 @@ function renderPlanning() {
     el.addEventListener("click", (e) => {
       e.stopPropagation();
       if (confirm("Ce plat a été supprimé. Voulez-vous ouvrir le compositeur pour le remplacer ?")) {
-        openMealComposer(el.dataset.deletedDate, el.dataset.deletedMeal);
+        const date = el.dataset.deletedDate;
+        const meal = el.dataset.deletedMeal;
+        const deletedId = el.dataset.deletedId;
+        // Remove the deleted dish from the meal before opening composer
+        const mealDishes = data.days[date][meal] || [];
+        data.days[date][meal] = mealDishes.filter((id) => id !== deletedId);
+        saveData();
+        openMealComposer(date, meal);
       }
     });
   });
@@ -234,7 +241,7 @@ function renderMealRow(iso, mealType, dishIds) {
       if (dish) {
         return `<button class="dish-chip" data-dish-view="${id}">${escapeHtml(dish.name)}</button>`;
       }
-      return `<button class="dish-chip deleted" data-deleted-date="${iso}" data-deleted-meal="${mealType}">Plat supprimé</button>`;
+      return `<button class="dish-chip deleted" data-deleted-date="${iso}" data-deleted-meal="${mealType}" data-deleted-id="${id}">Plat supprimé</button>`;
     })
     .join("");
   return `
@@ -1011,7 +1018,7 @@ renderPeriods();
 renderPlanning();
 renderDishList();
 
-const SW_VERSION = "v12"; // 👉 change cette valeur à chaque mise à jour (en même temps que CACHE_NAME dans sw.js)
+const SW_VERSION = "v13"; // 👉 change cette valeur à chaque mise à jour (en même temps que CACHE_NAME dans sw.js)
 
 if ("serviceWorker" in navigator) {
   window.addEventListener("load", () => {
