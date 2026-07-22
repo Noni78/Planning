@@ -28,13 +28,14 @@ function loadData() {
       return {
         dishes: parsed.dishes || [],
         days: parsed.days || {},
-        periods: parsed.periods || []
+        periods: parsed.periods || [],
+        ephemeralDishes: parsed.ephemeralDishes || {}
       };
     }
   } catch (e) {
     console.error("Erreur de lecture des données", e);
   }
-  return { dishes: [], days: {}, periods: [] };
+  return { dishes: [], days: {}, periods: [], ephemeralDishes: {} };
 }
 
 function saveData() {
@@ -237,6 +238,15 @@ function renderMealRow(iso, mealType, dishIds) {
   }
   const chips = dishIds
     .map((id) => {
+      // Check ephemeral dishes first
+      if (typeof id === "string" && id.startsWith("eph_")) {
+        const ed = data.ephemeralDishes[id];
+        if (ed) {
+          return `<button class="dish-chip ephemeral" data-dish-view="${id}">🕐 ${escapeHtml(ed.name)}</button>`;
+        }
+        // Ephemeral dish was removed — treat as deleted
+        return `<button class="dish-chip deleted" data-deleted-date="${iso}" data-deleted-meal="${mealType}" data-deleted-id="${id}">Plat supprimé</button>`;
+      }
       const dish = data.dishes.find((d) => d.id === id);
       if (dish) {
         return `<button class="dish-chip" data-dish-view="${id}">${escapeHtml(dish.name)}</button>`;
@@ -498,8 +508,14 @@ function openMealComposer(date, mealType) {
   const existing = day[mealType] || [];
   const selections = { entree: [], plat: [], dessert: [] };
   existing.forEach((id) => {
+    // Check regular dishes first, then ephemeral
     const dish = data.dishes.find((d) => d.id === id);
-    if (dish && selections[dish.category]) selections[dish.category].push(id);
+    if (dish && selections[dish.category]) {
+      selections[dish.category].push(id);
+    } else if (typeof id === "string" && id.startsWith("eph_")) {
+      const ed = data.ephemeralDishes[id];
+      if (ed && selections[ed.category]) selections[ed.category].push(id);
+    }
   });
 
   composerState = { date, mealType, selections, personCount: day.personCount };
@@ -542,8 +558,14 @@ function computeUsageCounts() {
   const usage = {};
   Object.values(data.days).forEach((day) => {
     if (day.archived) return; // exclude archived days from suggestions
-    (day.lunch || []).forEach((id) => (usage[id] = (usage[id] || 0) + 1));
-    (day.dinner || []).forEach((id) => (usage[id] = (usage[id] || 0) + 1));
+    (day.lunch || []).forEach((id) => {
+      if (typeof id === "string" && id.startsWith("eph_")) return; // skip ephemeral
+      usage[id] = (usage[id] || 0) + 1;
+    });
+    (day.dinner || []).forEach((id) => {
+      if (typeof id === "string" && id.startsWith("eph_")) return; // skip ephemeral
+      usage[id] = (usage[id] || 0) + 1;
+    });
   });
   return usage;
 }
@@ -585,7 +607,10 @@ function renderComposerCategory(cat) {
   chipsEl.innerHTML = sel
     .map((id) => {
       const dish = data.dishes.find((d) => d.id === id);
-      return `<span class="selected-chip">${escapeHtml(dish ? dish.name : "?")}<button data-remove="${cat}:${id}">✕</button></span>`;
+      const eph = (typeof id === "string" && id.startsWith("eph_")) ? data.ephemeralDishes[id] : null;
+      const displayName = dish ? dish.name : (eph ? eph.name : "?");
+      const prefix = eph ? "🕐 " : "";
+      return `<span class="selected-chip">${prefix}${escapeHtml(displayName)}<button data-remove="${cat}:${id}">✕</button></span>`;
     })
     .join("");
   chipsEl.querySelectorAll("[data-remove]").forEach((btn) => {
@@ -740,12 +765,28 @@ document.getElementById("btnClearMeal").addEventListener("click", () => {
 let detailDishId = null;
 
 function openDishDetail(id) {
+  // Handle ephemeral dishes
+  if (typeof id === "string" && id.startsWith("eph_")) {
+    const ed = data.ephemeralDishes[id];
+    if (ed) {
+      document.getElementById("detailDishName").textContent = ed.name;
+      document.getElementById("dishDetailBody").innerHTML = `
+        <div class="detail-row"><div class="label">Type</div><div class="value">🕐 Plat éphémère</div></div>
+        <div class="detail-row"><div class="label">Catégorie</div><div class="value">${CAT_LABELS[ed.category] || ed.category}</div></div>
+        <div class="detail-row"><div class="label">Notes</div><div class="value">${ed.notes ? escapeHtml(ed.notes) : "—"}</div></div>
+      `;
+      document.getElementById("btnEditFromDetail").style.display = "none";
+      openModal("modalDishDetail");
+    }
+    return;
+  }
   const dish = data.dishes.find((d) => d.id === id);
   if (!dish) {
     showToast("Ce plat n'existe plus dans la base.");
     return;
   }
   detailDishId = id;
+  document.getElementById("btnEditFromDetail").style.display = "block";
   document.getElementById("detailDishName").textContent = dish.name;
   const peopleRange =
     dish.minPeople != null || dish.maxPeople != null
@@ -836,8 +877,9 @@ function openDishForm(id, defaultCategory) {
   dishFormEditingId = id;
   dishFormMode = id ? "edit" : "add";
   const dish = id ? data.dishes.find((d) => d.id === id) : null;
+  const fromComposer = !!composerAddContext && !id; // only for new dishes from composer
 
-  document.getElementById("dishFormTitle").textContent = dish ? "Modifier le plat" : "Ajouter un plat";
+  document.getElementById("dishFormTitle").textContent = dish ? "Modifier le plat" : (fromComposer ? "Ajouter un plat au repas" : "Ajouter un plat");
   document.getElementById("dishFormName").value = dish ? dish.name : "";
   document.querySelectorAll('input[name="dishFormCat"]').forEach((r) => {
     r.checked = dish ? r.value === dish.category : r.value === (defaultCategory || "plat");
@@ -847,6 +889,20 @@ function openDishForm(id, defaultCategory) {
   document.getElementById("dishFormFav").checked = dish ? !!dish.favorite : false;
   document.getElementById("dishFormNotes").value = dish ? dish.notes || "" : "";
   document.getElementById("btnDeleteDish").style.display = dish ? "block" : "none";
+
+  // Ephemeral checkbox: visible only when adding from composer
+  const ephemeralRow = document.getElementById("dishFormEphemeralRow");
+  const persistentFields = document.getElementById("dishFormPersistentFields");
+  const ephemeralCheckbox = document.getElementById("dishFormEphemeral");
+  if (fromComposer) {
+    ephemeralRow.style.display = "flex";
+    ephemeralCheckbox.checked = false;
+    persistentFields.style.display = "block";
+  } else {
+    ephemeralRow.style.display = "none";
+    ephemeralCheckbox.checked = false;
+    persistentFields.style.display = "block";
+  }
 
   // Reset duplicate warning
   document.getElementById("dishFormDuplicateWarning").style.display = "none";
@@ -861,6 +917,29 @@ document.getElementById("btnSaveDish").addEventListener("click", () => {
     showToast("Merci de donner un nom au plat.");
     return;
   }
+  const ephemeral = document.getElementById("dishFormEphemeral").checked;
+  const notes = document.getElementById("dishFormNotes").value.trim();
+
+  // --- Ephemeral path: dish goes only to the current meal, not the database ---
+  if (ephemeral && composerAddContext && composerState) {
+    const cat = composerAddContext;
+    if (composerState.selections[cat].length >= 4) {
+      showToast("Maximum de 4 plats déjà atteint pour cette catégorie.");
+      return;
+    }
+    const ephId = "eph_" + uid();
+    data.ephemeralDishes[ephId] = { name, category: cat, notes };
+    composerState.selections[cat].push(ephId);
+    saveData();
+    closeModal("modalDishForm");
+    persistComposerState();
+    renderComposerCategory(cat);
+    showToast("Plat éphémère ajouté au repas.");
+    composerAddContext = null;
+    return;
+  }
+
+  // --- Normal path ---
   const category = document.querySelector('input[name="dishFormCat"]:checked').value;
   const minVal = document.getElementById("dishFormMin").value;
   const maxVal = document.getElementById("dishFormMax").value;
@@ -871,9 +950,8 @@ document.getElementById("btnSaveDish").addEventListener("click", () => {
     return;
   }
   const favorite = document.getElementById("dishFormFav").checked;
-  const notes = document.getElementById("dishFormNotes").value.trim();
 
-let newDishId = null;
+  let newDishId = null;
   if (dishFormMode === "edit" && dishFormEditingId) {
     const dish = data.dishes.find((d) => d.id === dishFormEditingId);
     Object.assign(dish, { name, category, minPeople, maxPeople, favorite, notes });
@@ -926,14 +1004,34 @@ document.getElementById("btnDeleteDish").addEventListener("click", () => {
   showToast("Plat supprimé.");
 });
 
+// ------------------- Ephemeral dish toggle -------------------
+
+document.getElementById("dishFormEphemeral").addEventListener("change", () => {
+  const ephemeral = document.getElementById("dishFormEphemeral").checked;
+  const persistentFields = document.getElementById("dishFormPersistentFields");
+  const warning = document.getElementById("dishFormDuplicateWarning");
+  const saveBtn = document.getElementById("btnSaveDish");
+
+  persistentFields.style.display = ephemeral ? "none" : "block";
+  // When ephemeral, duplicate names are fine — re-enable save
+  if (ephemeral) {
+    warning.style.display = "none";
+    saveBtn.disabled = false;
+  } else {
+    // Re-trigger duplicate check
+    document.getElementById("dishFormName").dispatchEvent(new Event("input"));
+  }
+});
+
 // ------------------- Duplicate name check -------------------
 
 document.getElementById("dishFormName").addEventListener("input", () => {
   const name = document.getElementById("dishFormName").value.trim();
   const warning = document.getElementById("dishFormDuplicateWarning");
   const saveBtn = document.getElementById("btnSaveDish");
+  const ephemeral = document.getElementById("dishFormEphemeral").checked;
 
-  if (!name) {
+  if (!name || ephemeral) {
     warning.style.display = "none";
     saveBtn.disabled = false;
     return;
@@ -986,7 +1084,7 @@ document.getElementById("importFileInput").addEventListener("change", (e) => {
       const parsed = JSON.parse(reader.result);
       if (!parsed.dishes || !parsed.days) throw new Error("Format invalide");
       if (!confirm("Importer ce fichier remplacera toutes les données actuelles. Continuer ?")) return;
-      data = { dishes: parsed.dishes, days: parsed.days, periods: parsed.periods || [] };
+      data = { dishes: parsed.dishes, days: parsed.days, periods: parsed.periods || [], ephemeralDishes: parsed.ephemeralDishes || {} };
       saveData();
       renderDishList();
       renderPeriods();
@@ -1002,7 +1100,7 @@ document.getElementById("importFileInput").addEventListener("change", (e) => {
 
 document.getElementById("btnReset").addEventListener("click", () => {
   if (!confirm("Effacer TOUTES les données (plats et plannings) ? Cette action est irréversible.")) return;
-  data = { dishes: [], days: {}, periods: [] };
+  data = { dishes: [], days: {}, periods: [], ephemeralDishes: {} };
   saveData();
   renderDishList();
   renderPeriods();

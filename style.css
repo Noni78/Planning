@@ -529,6 +529,11 @@ button {
 
 .field-hint { font-size: 13px; color: var(--ink-soft); margin-top: -8px; margin-bottom: 14px; }
 
+#dishFormEphemeralRow.toggle-row {
+  border-color: var(--terracotta);
+  background: #FFF8F0;
+}
+
 .duplicate-warning {
   font-size: 13px;
   font-weight: 700;
@@ -551,6 +556,13 @@ button {
 .dish-chip.deleted:hover {
   background: #F6E1DD;
   color: var(--danger);
+}
+
+.dish-chip.ephemeral {
+  background: #FFF3E0;
+  color: var(--terracotta-dark);
+  border: 1.5px dashed var(--terracotta);
+  font-style: italic;
 }
 
 /* ---------- Archive feature ---------- */
